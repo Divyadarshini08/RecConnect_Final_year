@@ -1,29 +1,50 @@
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { API } from "../../utils/api";
+import { useAuth } from "../../hooks/useAuth";
 
 const AgentBooking = () => {
   const { alumniId } = useParams();
-  const user = JSON.parse(localStorage.getItem("user"));
+  const navigate = useNavigate();
+  const user = useAuth();
 
   const [slots, setSlots] = useState([]);
+  const [alumniName, setAlumniName] = useState("");
   const [loading, setLoading] = useState(true);
-  const [bookingState, setBookingState] = useState(null); // null | 'processing' | 'success' | 'error'
+  const [bookingState, setBookingState] = useState(null);
   const [bookingResult, setBookingResult] = useState(null);
   const [query, setQuery] = useState("I'd like to book a mentorship session");
   const [selectedSlot, setSelectedSlot] = useState(null);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
-    fetch(`${API}/api/student/alumni-slots/${alumniId}`)
-      .then(r => r.json())
-      .then(data => { setSlots(data); setLoading(false); })
-      .catch(() => setLoading(false));
+    const fetchData = async () => {
+      try {
+        const slotRes = await fetch(`${API}/api/student/alumni-slots/${alumniId}`);
+        const slotData = await slotRes.json();
+        setSlots(slotData);
+
+        const profileRes = await fetch(`${API}/api/alumni/profile/${alumniId}`);
+        const profileData = await profileRes.json();
+        setAlumniName(profileData.name || "Alumni");
+      } catch (err) {
+        console.error("Error fetching data:", err);
+        setError("Failed to load available slots");
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
   }, [alumniId]);
 
   const handleAgentBook = async () => {
-    if (!selectedSlot) return;
+    if (!selectedSlot) {
+      setError("Please select a time slot");
+      return;
+    }
     setBookingState("processing");
     setBookingResult(null);
+    setError(null);
 
     try {
       const res = await fetch(`${API}/api/agent/book`, {
@@ -39,111 +60,193 @@ const AgentBooking = () => {
 
       const data = await res.json();
       setBookingResult(data);
-      setBookingState(data.booking?.approved ? "success" : "rejected");
+      if (data.booking?.approved || data.success) {
+        setBookingState("success");
+        setTimeout(() => navigate("/student/dashboard"), 2000);
+      } else {
+        setBookingState("rejected");
+      }
     } catch (err) {
+      setError("Failed to send booking request");
       setBookingState("error");
     }
   };
 
-  const formatDate = (d) => new Date(d).toLocaleDateString("en-IN", {
-    weekday: "short", month: "short", day: "numeric",
-  });
+  const formatDate = (dateStr) =>
+    new Date(dateStr).toLocaleDateString("en-US", {
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+
+  const formatTime = (timeStr) => {
+    const [hours, minutes] = timeStr.split(":");
+    const hour = parseInt(hours);
+    const ampm = hour >= 12 ? "PM" : "AM";
+    const displayHour = hour % 12 || 12;
+    return `${displayHour}:${minutes} ${ampm}`;
+  };
 
   if (loading) return (
-    <div className="page">
-      <p style={{ opacity: 0.5 }}>Loading available slots...</p>
+    <div className="page" style={{ textAlign: "center", paddingTop: "60px" }}>
+      <p style={{ opacity: 0.6 }}>Loading available slots...</p>
     </div>
   );
 
   return (
-    <div className="page" style={{ maxWidth: 700 }}>
+    <div className="page" style={{ maxWidth: "900px", margin: "0 auto" }}>
       {/* Header */}
-      <div style={{ marginBottom: 28 }}>
+      <div style={{ marginBottom: "32px" }}>
         <div style={{
           display: "inline-flex",
           alignItems: "center",
-          gap: 8,
-          background: "rgba(102,126,234,0.15)",
-          border: "1px solid rgba(102,126,234,0.3)",
-          borderRadius: 20,
-          padding: "4px 14px",
-          fontSize: 12,
+          gap: "8px",
+          background: "rgba(59, 130, 246, 0.15)",
+          border: "1px solid rgba(59, 130, 246, 0.3)",
+          borderRadius: "20px",
+          padding: "6px 16px",
+          fontSize: "12px",
           color: "#93c5fd",
-          marginBottom: 12,
+          marginBottom: "12px",
+          fontWeight: "600",
         }}>
-          🤖 Agentic AI Booking
+          🤖 AI-Powered Booking
         </div>
-        <h2>Book a Session</h2>
-        <p style={{ opacity: 0.6, fontSize: 14 }}>
-          Claude's agents will validate, match intent, and notify both parties automatically.
+        <h2 style={{ marginBottom: "8px" }}>AI-Matched with {alumniName}</h2>
+        <p style={{ opacity: 0.6, fontSize: "15px" }}>
+          Claude's agents will validate intent, find the best fit, and automate notifications.
         </p>
       </div>
 
+      {error && (
+        <div style={{
+          padding: "12px 16px",
+          background: "rgba(239, 68, 68, 0.15)",
+          border: "1px solid rgba(239, 68, 68, 0.3)",
+          borderRadius: "8px",
+          color: "#fca5a5",
+          marginBottom: "20px",
+          fontSize: "14px",
+        }}>
+          ⚠️ {error}
+        </div>
+      )}
+
       {/* Session goal input */}
-      <div className="card" style={{ marginBottom: 20 }}>
-        <label style={{ fontWeight: 600, fontSize: 14, marginBottom: 8, display: "block" }}>
+      <div className="card" style={{ marginBottom: "20px" }}>
+        <label style={{ fontWeight: "600", fontSize: "14px", marginBottom: "8px", display: "block", color: "#e5e7eb" }}>
           💬 What would you like to discuss?
         </label>
-        <p style={{ fontSize: 12, opacity: 0.5, marginBottom: 10 }}>
-          This helps the AI understand your intent and send the right context to the alumni.
+        <p style={{ fontSize: "12px", opacity: "0.5", marginBottom: "10px" }}>
+          Claude will understand your intent and provide matching context.
         </p>
         <textarea
           value={query}
-          onChange={e => setQuery(e.target.value)}
+          onChange={(e) => setQuery(e.target.value)}
           rows={3}
           placeholder="e.g. I need help with my resume for software engineering roles..."
           style={{
             width: "100%",
-            background: "rgba(255,255,255,0.08)",
-            border: "1px solid rgba(255,255,255,0.15)",
+            background: "rgba(0, 0, 0, 0.3)",
+            border: "1px solid rgba(255, 255, 255, 0.2)",
             color: "#fff",
-            borderRadius: 12,
+            borderRadius: "8px",
             padding: "12px 14px",
-            fontSize: 14,
+            fontSize: "14px",
             resize: "vertical",
             fontFamily: "Poppins, sans-serif",
             outline: "none",
+          }}
+          onFocus={(e) => {
+            e.target.style.background = "rgba(0, 0, 0, 0.4)";
+            e.target.style.borderColor = "rgba(59, 130, 246, 0.5)";
+          }}
+          onBlur={(e) => {
+            e.target.style.background = "rgba(0, 0, 0, 0.3)";
+            e.target.style.borderColor = "rgba(255, 255, 255, 0.2)";
           }}
         />
       </div>
 
       {/* Slot selector */}
-      <div className="card" style={{ marginBottom: 20 }}>
-        <label style={{ fontWeight: 600, fontSize: 14, marginBottom: 12, display: "block" }}>
-          📅 Select a Time Slot
+      <div className="card" style={{ marginBottom: "20px" }}>
+        <label style={{ fontWeight: "600", fontSize: "14px", marginBottom: "12px", display: "block", color: "#e5e7eb" }}>
+          📅 Available Time Slots
         </label>
 
         {slots.length === 0 ? (
-          <p style={{ opacity: 0.5 }}>No available slots right now.</p>
+          <div style={{
+            padding: "40px 20px",
+            textAlign: "center",
+            background: "rgba(0, 0, 0, 0.2)",
+            borderRadius: "8px",
+            border: "1px dashed rgba(255, 255, 255, 0.1)",
+          }}>
+            <p style={{ opacity: 0.5 }}>No available slots right now</p>
+          </div>
         ) : (
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
-            {slots.map(slot => (
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+            gap: "12px",
+          }}>
+            {slots.map((slot) => (
               <div
                 key={slot.availability_id}
                 onClick={() => setSelectedSlot(slot)}
                 style={{
-                  padding: "14px 18px",
-                  borderRadius: 14,
-                  border: selectedSlot?.availability_id === slot.availability_id
-                    ? "2px solid #667eea"
-                    : "1px solid rgba(255,255,255,0.15)",
+                  padding: "14px 16px",
                   background: selectedSlot?.availability_id === slot.availability_id
-                    ? "rgba(102,126,234,0.2)"
-                    : "rgba(255,255,255,0.05)",
+                    ? "linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(6, 182, 212, 0.2))"
+                    : "rgba(0, 0, 0, 0.2)",
+                  border: selectedSlot?.availability_id === slot.availability_id
+                    ? "2px solid #3b82f6"
+                    : "1px solid rgba(255, 255, 255, 0.1)",
+                  borderRadius: "8px",
                   cursor: "pointer",
-                  transition: "all 0.2s",
-                  minWidth: 150,
+                  transition: "all 0.2s ease",
+                  textAlign: "center",
                 }}
               >
-                <div style={{ fontSize: 13, fontWeight: 600 }}>{formatDate(slot.date)}</div>
-                <div style={{ fontSize: 12, opacity: 0.7, marginTop: 4 }}>
-                  {slot.start_time} – {slot.end_time}
+                <div style={{ fontSize: "12px", fontWeight: "600", color: "#93c5fd", marginBottom: "4px" }}>
+                  {formatDate(slot.date)}
+                </div>
+                <div style={{ fontSize: "14px", fontWeight: "500", color: "#e5e7eb" }}>
+                  {formatTime(slot.start_time)} – {formatTime(slot.end_time)}
                 </div>
               </div>
             ))}
           </div>
         )}
       </div>
+
+      {/* Book Button */}
+      <button
+        onClick={handleAgentBook}
+        disabled={bookingState === "processing" || !selectedSlot}
+        style={{
+          width: "100%",
+          padding: "12px 20px",
+          background: bookingState === "processing"
+            ? "linear-gradient(135deg, #64748b, #475569)"
+            : "linear-gradient(135deg, #3b82f6, #2563eb)",
+          color: "#fff",
+          border: "none",
+          borderRadius: "8px",
+          fontSize: "15px",
+          fontWeight: "600",
+          cursor: bookingState === "processing" ? "not-allowed" : "pointer",
+          transition: "all 0.3s ease",
+          boxShadow: bookingState === "processing"
+            ? "none"
+            : "0 4px 15px rgba(59, 130, 246, 0.4)",
+          opacity: bookingState === "processing" ? 0.7 : 1,
+          marginBottom: "16px",
+        }}
+      >
+        {bookingState === "processing" ? "⏳ Processing with AI..." : "✓ Book with AI"}
+      </button>
 
       {/* Booking result */}
       {bookingResult && (
@@ -179,7 +282,7 @@ const AgentBooking = () => {
                   <div style={{ marginTop: 6, display: "flex", gap: 6, flexWrap: "wrap" }}>
                     {bookingResult.intent.topics.map(t => (
                       <span key={t} style={{
-                        background: "rgba(102,126,234,0.2)",
+                        background: "rgba(59, 130, 246, 0.2)",
                         borderRadius: 20,
                         padding: "2px 10px",
                         fontSize: 11,

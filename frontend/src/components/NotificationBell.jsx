@@ -7,7 +7,7 @@ const NotificationBell = () => {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
 
-  const unread = notifications.filter(n => !n.is_read).length;
+  const unread = Array.isArray(notifications) ? notifications.filter(n => !n.is_read).length : 0;
 
   useEffect(() => {
     if (!user) return;

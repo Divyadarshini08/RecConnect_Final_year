@@ -1,5 +1,12 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import Navbar from "./components/Navbar";
+import { ProtectedAdminRoute } from "./components/ProtectedAdminRoute";
+import ExcelImport from "./components/ExcelImport";
+import ExcelUpdateAlumni from "./components/ExcelUpdateAlumni";
+
+// Admin
+import AdminPanel from "./pages/AdminPanel";
+import AdminLogin from "./pages/AdminLogin";
 
 // Auth
 import Login from "./pages/auth/Login";
@@ -18,6 +25,11 @@ import AIChat from "./pages/student/AIChat";
 import SmartMatch from "./pages/student/SmartMatch";
 import AgentBooking from "./pages/student/AgentBooking";
 
+// Matching pages
+import MatchingHub from "./pages/student/MatchingHub";
+import AIMatch from "./pages/student/AIMatch";
+import ManualMatch from "./pages/student/ManualMatch";
+
 // Alumni pages
 import AlumniDashboard from "./pages/alumni/AlumniDashboard";
 import Availability from "./pages/alumni/Availability";
@@ -26,7 +38,8 @@ import AlumniProfile from "./pages/alumni/AlumniProfile";
 import UpcomingSessions from "./pages/alumni/UpcomingSessions";
 
 function App() {
-  const user = JSON.parse(localStorage.getItem("user"));
+  const userString = localStorage.getItem("user");
+  const user = userString ? JSON.parse(userString) : null;
 
   return (
     <>
@@ -39,9 +52,17 @@ function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
 
+        {/* Admin - Protected */}
+        <Route path="/admin/login" element={<AdminLogin />} />
+        <Route path="/admin" element={<ProtectedAdminRoute><AdminPanel /></ProtectedAdminRoute>} />
+        <Route path="/admin/import-alumni" element={<ProtectedAdminRoute><ExcelImport /></ProtectedAdminRoute>} />
+        <Route path="/admin/update-alumni" element={<ProtectedAdminRoute><ExcelUpdateAlumni /></ProtectedAdminRoute>} />
+
         {/* Student – standard */}
         <Route path="/student/dashboard" element={<StudentDashboard />} />
-        <Route path="/student/find-alumni" element={<FindAlumni />} />
+        <Route path="/student/find-alumni" element={<MatchingHub />} />
+        <Route path="/student/ai-match" element={<AIMatch />} />
+        <Route path="/student/manual-match" element={<ManualMatch />} />
         <Route path="/student/my-sessions" element={<MySessions />} />
         <Route path="/student/profile" element={<StudentProfile />} />
         <Route path="/student/alumni/:alumniId" element={<AlumniSlots />} />

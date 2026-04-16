@@ -10,25 +10,48 @@ const Login = () => {
 
   const handleLogin = async () => {
     setError("");
+    
+    if (!email || !password) {
+      setError("Please enter email and password");
+      return;
+    }
+
     try {
+      console.log("Logging in with email:", email);
       const res = await fetch(`${API}/api/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       });
 
+      console.log("Login response status:", res.status);
       const data = await res.json();
-      if (!res.ok) return setError(data.message);
+      console.log("Login response:", data);
 
-      localStorage.setItem("user", JSON.stringify(data));
+      if (!res.ok) {
+        return setError(data.message || "Login failed");
+      }
 
-      navigate(
-        data.role === "student"
-          ? "/student/dashboard"
-          : "/alumni/dashboard"
-      );
-    } catch {
-      setError("Server not reachable");
+      if (data.user_id) {
+        // Save user data WITH token
+        localStorage.setItem("user", JSON.stringify({
+          user_id: data.user_id,
+          name: data.name,
+          email: data.email,
+          role: data.role,
+          token: data.token  // JWT token for future requests
+        }));
+        navigate(
+          data.role === "student"
+            ? "/student/dashboard"
+            : "/alumni/dashboard"
+        );
+      } else {
+        setError("Login response missing user data");
+      }
+    } catch (err) {
+      console.error("Login error:", err);
+      setError("Failed to connect to server. Make sure backend is running on port 5000.");
     }
   };
 

@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { API } from "../../utils/api";
+import { useAuth } from "../../hooks/useAuth";
 
 const FindAlumni = () => {
-  const user = JSON.parse(localStorage.getItem("user"));
+  const user = useAuth();
   const [alumni, setAlumni] = useState([]);
   const [loading, setLoading] = useState(true);
 

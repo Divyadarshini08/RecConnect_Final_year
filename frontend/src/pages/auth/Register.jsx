@@ -31,6 +31,11 @@ const Register = () => {
       return;
     }
 
+    if (!form.name || !form.email || !form.password) {
+      setError("Please fill in all required fields");
+      return;
+    }
+
     const payload = {
       name: form.name,
       email: form.email,
@@ -43,21 +48,34 @@ const Register = () => {
       expertise: form.expertise,
     };
 
-    const res = await fetch(`${API}/api/auth/register`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
+    try {
+      console.log("Registering with payload:", payload);
+      const res = await fetch(`${API}/api/auth/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
 
-    const data = await res.json();
+      console.log("Register response status:", res.status);
+      const data = await res.json();
+      console.log("Register response data:", data);
 
-    if (!res.ok) {
-      setError(data.message || "Registration failed");
-      return;
+      if (!res.ok) {
+        setError(data.message || "Registration failed");
+        return;
+      }
+
+      if (data.user_id) {
+        localStorage.setItem("user", JSON.stringify(data));
+        alert("Registration successful! Logging you in...");
+        navigate("/login");
+      } else {
+        setError("Registration response missing user data");
+      }
+    } catch (err) {
+      console.error("Register error:", err);
+      setError("Failed to connect to server. Make sure backend is running on port 5000.");
     }
-
-    alert("Registration successful");
-    navigate("/login");
   };
 
   return (

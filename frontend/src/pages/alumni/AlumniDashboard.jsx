@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { API } from "../../utils/api";
+import { useAuth } from "../../hooks/useAuth";
 
 const AlumniDashboard = () => {
-  // ✅ FIX: define user
-  const user = JSON.parse(localStorage.getItem("user"));
+  const user = useAuth();
 
   const [stats, setStats] = useState({
     pending: 0,

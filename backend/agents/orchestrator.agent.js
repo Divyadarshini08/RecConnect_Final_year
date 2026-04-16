@@ -1,7 +1,7 @@
 /**
  * REConnect Orchestrator Agent
  * ─────────────────────────────────────────────────────────────────
- * A multi-agent system powered by Anthropic Claude.
+ * A multi-agent system powered by Google Gemini.
  * Enhanced with NLP, security sanitization, and error logging.
  * 
  * Agents:
@@ -12,43 +12,64 @@
  *   5. Orchestrator     – coordinates the full pipeline
  */
 
-import Anthropic from "@anthropic-ai/sdk";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import db from "../db.js";
 import { logMetric } from "../metrics/metrics.logger.js";
 import { sanitizeIdForLLM, safeParseJSON, analyzeSentimentAndUrgency } from "../utils/nlp.utils.js";
 import { validators, sanitizeForLLM, validateIntent } from "../utils/validation.js";
 
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const client = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 /* ──────────────────────────────────────────────────────────────────
-   SHARED HELPER: call Claude with a system + user prompt
+   SHARED HELPER: call Gemini with a system + user prompt
    ────────────────────────────────────────────────────────────────── */
-async function callClaude(systemPrompt, userPrompt, maxTokens = 800) {
+async function callGemini(systemPrompt, userPrompt, maxTokens = 800) {
   try {
+    // Check if API key is configured
+    if (!process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY.includes("ADD_YOUR")) {
+      throw new Error("❌ GEMINI_API_KEY not configured in .env file. Get one from https://aistudio.google.com/");
+    }
+
     const start = Date.now();
     
     // Truncate prompts for safety
     const truncatedUserPrompt = userPrompt.substring(0, 3000);
     
-    const response = await client.messages.create({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: maxTokens,
-      system: systemPrompt,
-      messages: [{ role: "user", content: truncatedUserPrompt }],
+    console.log("[callGemini] 📤 Calling Gemini API...");
+    
+    const model = client.getGenerativeModel({ 
+      model: "gemini-1.5-flash"
+      // Note: Gemini doesn't support systemInstruction in the same way as Claude
+      // We'll prepend the system prompt to the user message instead
+    });
+    
+    // Combine system prompt with user prompt since Gemini doesn't support separate system instruction
+    const combinedPrompt = `${systemPrompt}\n\nUser request: ${truncatedUserPrompt}`;
+    
+    const response = await model.generateContent({
+      contents: [{ 
+        role: "user", 
+        parts: [{ text: combinedPrompt }] 
+      }],
+      generationConfig: {
+        maxOutputTokens: maxTokens,
+        temperature: 0.7,
+      }
     });
     
     const latency = Date.now() - start;
     await logMetric("llm_latency_ms", latency).catch(() => {});
     
-    // Log API usage for monitoring
-    if (response.usage) {
-      await logMetric("llm_input_tokens", response.usage.input_tokens).catch(() => {});
-      await logMetric("llm_output_tokens", response.usage.output_tokens).catch(() => {});
-    }
+    const text = response.response.text();
+    console.log("[callGemini] ✅ Response received in", latency, "ms");
     
-    return response.content[0].text;
+    // Log token usage is handled differently in Gemini, but we log anyway
+    await logMetric("llm_response_received", 1).catch(() => {});
+    
+    return text;
   } catch (err) {
-    console.error("[callClaude] Error:", err.message);
+    console.error("[callGemini] ❌ Error:", err.message);
+    console.error("[callGemini] Stack:", err.stack);
     throw err;
   }
 }
@@ -62,8 +83,9 @@ export async function intentAgent(query) {
     // Validate and sanitize input
     const cleanQuery = validators.query(query);
     
-    // Perform sentiment analysis on query to refine urgency detection
-    const sentiment = await analyzeSentimentAndUrgency(cleanQuery, client);
+    // Simple urgency detection based on keywords (skip complex sentiment analysis)
+    const urgentKeywords = ["urgent", "asap", "emergency", "help", "stuck", "critical"];
+    const isUrgent = urgentKeywords.some(k => cleanQuery.toLowerCase().includes(k));
     
     const system = `You are an Intent Classification Agent for REConnect, a student-alumni mentorship platform.
 Extract structured intent from student queries.
@@ -77,11 +99,11 @@ Return ONLY valid JSON (no markdown, no explanation) with these fields:
   "summary": one-sentence summary of what student needs
 }`;
 
-    const text = await callClaude(system, `Student query: "${cleanQuery}"`);
+    const text = await callGemini(system, `Student query: "${cleanQuery}"`);
     let result = safeParseJSON(text, {
       intent: "book_session",
       domain: null,
-      urgency: "medium",
+      urgency: isUrgent ? "high" : "medium",
       topics: [],
       preferred_time: null,
       summary: cleanQuery.substring(0, 100),
@@ -90,11 +112,8 @@ Return ONLY valid JSON (no markdown, no explanation) with these fields:
     // Validate and normalize intent result
     result = validateIntent(result);
     
-    // Override urgency based on sentiment analysis
-    if (sentiment.urgency === "critical") result.urgency = "high";
-    if (sentiment.sentiment < -0.7) result.urgency = "high";
-    
     await logMetric("intent_classified", 1).catch(() => {});
+    console.log("[IntentAgent] ✅ Intent classified:", result.intent);
     return result;
   } catch (err) {
     console.error("[IntentAgent] Error:", err.message);
@@ -126,6 +145,7 @@ export async function matchingAgent(studentId, intent) {
   if (!student) return [];
 
   // Fetch available alumni with open slots
+  // FIXED: Changed from INNER JOIN to LEFT JOIN to include alumni even without slots
   const [alumni] = await db.query(
     `SELECT DISTINCT
        u.user_id AS alumni_id,
@@ -133,11 +153,11 @@ export async function matchingAgent(studentId, intent) {
        ap.domain,
        ap.company,
        ap.expertise,
-       COUNT(av.availability_id) AS free_slots
+       COUNT(CASE WHEN av.availability_id IS NOT NULL AND av.is_booked = 0 THEN 1 END) AS free_slots
      FROM users u
      JOIN alumni_profile ap ON ap.alumni_id = u.user_id
-     JOIN availability av ON av.alumni_id = u.user_id
-     WHERE u.role = 'alumni' AND av.is_booked = 0
+     LEFT JOIN availability av ON av.alumni_id = u.user_id AND av.is_booked = 0
+     WHERE u.role = 'alumni'
      GROUP BY u.user_id`
   );
 
@@ -177,7 +197,7 @@ ${alumni.map(a =>
 
 Rank all alumni by connection strength. Mark recommended:true only for score >= 70.`;
 
-  const text = await callClaude(system, userPrompt, 1200);
+  const text = await callGemini(system, userPrompt, 1200);
 
   try {
     const rankings = safeParseJSON(text, []);
@@ -314,7 +334,7 @@ Return ONLY valid JSON:
 
 Evaluate: Is this a valid booking? Check policy compliance.`;
 
-    const text = await callClaude(system, userPrompt);
+    const text = await callGemini(system, userPrompt);
 
     try {
       const decision = safeParseJSON(text, {
@@ -376,7 +396,7 @@ Return ONLY valid JSON:
 Context: ${JSON.stringify(sanitizedContext)}
 Write a professional notification message.`;
 
-    const text = await callClaude(system, userPrompt, 300);
+    const text = await callGemini(system, userPrompt, 300);
 
     let message = `You have a new update on REConnect.`;
     let emoji = "🔔";
@@ -414,40 +434,53 @@ export async function orchestrate({ studentId, alumniId, availabilityId, query, 
   const pipelineStart = Date.now();
 
   try {
+    console.log("🎯 [Orchestrator] Starting pipeline:", { studentId, alumniId, availabilityId, query: query?.substring(0, 50) });
+    
     // Validate input parameters
     studentId = validators.studentId(studentId);
     query = query ? validators.query(query) : "book a mentorship session";
+    console.log("✅ [Orchestrator] Validated inputs");
     
     // ── Step 1: Classify intent with NLP
     const intent = await intentAgent(query);
+    console.log("✅ [Orchestrator] Intent classified:", intent.intent);
     await logMetric("agent_intent_classified", 1).catch(() => {});
 
     // ── Step 2: Find + rank matching alumni (if no specific alumni targeted)
     let matchedAlumni = null;
     if (!alumniId) {
+      console.log("🔍 [Orchestrator] Finding alumni matches...");
       const ranked = await matchingAgent(studentId, intent);
       matchedAlumni = ranked[0] || null;
       alumniId = matchedAlumni?.alumni_id;
+      console.log("✅ [Orchestrator] Matched alumni:", alumniId);
+    } else {
+      console.log("✅ [Orchestrator] Alumni already specified:", alumniId);
     }
 
     // ── Step 3: Booking policy check with time conflict detection
     let bookingDecision = null;
     if (availabilityId && alumniId) {
+      console.log("📋 [Orchestrator] Checking booking policy...");
       bookingDecision = await bookingAgent(studentId, alumniId, availabilityId, intent);
+      console.log("📋 [Orchestrator] Booking decision:", { approved: bookingDecision.approved, policy: bookingDecision.policy });
 
       if (bookingDecision.approved) {
+        console.log("💾 [Orchestrator] Creating booking in database...");
         // Create the booking
         const [result] = await db.query(
           `INSERT INTO bookings (student_id, alumni_id, availability_id, status, created_at)
            VALUES (?, ?, ?, 'pending', NOW())`,
           [studentId, alumniId, availabilityId]
         );
+        console.log("✅ [Orchestrator] Booking created, booking_id:", result.insertId);
         
         // Update availability slot as booked
         await db.query(
           `UPDATE availability SET is_booked = 1 WHERE availability_id = ?`,
           [availabilityId]
         );
+        console.log("✅ [Orchestrator] Marked availability as booked");
 
         // ── Step 4: Send notifications
         const slot = bookingDecision.slot;
@@ -460,6 +493,8 @@ export async function orchestrate({ studentId, alumniId, availabilityId, query, 
           [studentId]
         ).catch(() => [{}]);
 
+        console.log("📧 [Orchestrator] Sending notifications to alumni:", alumniId, "and student:", studentId);
+        
         // Notify alumni of new booking request
         await notificationAgent(alumniId, "new_booking_request", {
           student_name: studentUser?.name,
@@ -475,12 +510,18 @@ export async function orchestrate({ studentId, alumniId, availabilityId, query, 
           time: slot.start_time,
         }).catch(err => console.error("[Orchestrator] Student notification failed:", err.message));
         
+        console.log("✅ [Orchestrator] Notifications sent");
         await logMetric("booking_created", 1).catch(() => {});
+      } else {
+        console.log("❌ [Orchestrator] Booking rejected:", bookingDecision.reason);
       }
+    } else {
+      console.log("⚠️ [Orchestrator] Missing availabilityId or alumniId, skipping booking");
     }
 
     const pipelineTime = Date.now() - pipelineStart;
     await logMetric("orchestrator_pipeline_ms", pipelineTime).catch(() => {});
+    console.log("⏱️ [Orchestrator] Pipeline completed in", pipelineTime, "ms");
 
     return {
       success: bookingDecision?.approved || false,

@@ -1,6 +1,7 @@
 import express from "express";
 import db from "../db.js";
 import bcrypt from "bcrypt";
+import jwt from "jsonwebtoken";
 
 const router = express.Router();
 
@@ -21,20 +22,24 @@ router.post("/register", async (req, res) => {
     expertise
   } = req.body;
 
-  const hash = await bcrypt.hash(password, 10);
-
   try {
+    // Validate required fields
+    if (!name || !email || !password) {
+      return res.status(400).json({ message: "Name, email, and password are required" });
+    }
+
+    const hash = await bcrypt.hash(password, 10);
+
     // 1️⃣ Insert user
     const [result] = await db.query(
       "INSERT INTO users (name, email, password_hash, role) VALUES (?, ?, ?, ?)",
       [name, email, hash, role]
     );
 
-    // ✅ FIX: define userId
     const userId = result.insertId;
 
     // 2️⃣ Student profile
-    if (role === "student") {
+    if (role === "student" && skills && interests) {
       await db.query(
         `
         INSERT INTO student_profile (student_id, skills, interests)
@@ -44,8 +49,8 @@ router.post("/register", async (req, res) => {
       );
     }
 
-    // 3️⃣ Alumni profile (WITH registration data)
-    if (role === "alumni") {
+    // 3️⃣ Alumni profile
+    if (role === "alumni" && domain && company && expertise) {
       await db.query(
         `
         INSERT INTO alumni_profile (alumni_id, domain, company, expertise)
@@ -58,11 +63,26 @@ router.post("/register", async (req, res) => {
     res.status(201).json({
       user_id: userId,
       role,
-      name
+      name,
+      email,
+      token: jwt.sign(
+        { id: userId, role, email },
+        process.env.JWT_SECRET || "default-secret-change-me",
+        { expiresIn: "7d" }
+      )
     });
   } catch (err) {
-    console.error(err);
-    res.status(400).json({ message: "Registration failed" });
+    console.error("Registration error:", err);
+    
+    // Handle specific database errors
+    if (err.code === 'ER_DUP_ENTRY') {
+      return res.status(400).json({ message: "Email already registered" });
+    }
+    if (err.code === 'ECONNREFUSED') {
+      return res.status(503).json({ message: "Database connection failed. Please try again later." });
+    }
+    
+    res.status(400).json({ message: "Registration failed: " + err.message });
   }
 });
 
@@ -90,7 +110,13 @@ router.post("/login", async (req, res) => {
     res.json({
       user_id: user.user_id,
       role: user.role,
-      name: user.name
+      name: user.name,
+      email: user.email,
+      token: jwt.sign(
+        { id: user.user_id, role: user.role, email: user.email },
+        process.env.JWT_SECRET || "default-secret-change-me",
+        { expiresIn: "7d" }
+      )
     });
   } catch (err) {
     console.error(err);

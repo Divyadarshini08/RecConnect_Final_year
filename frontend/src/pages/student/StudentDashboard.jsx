@@ -1,14 +1,15 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { API } from "../../utils/api";
+import { useAuth } from "../../hooks/useAuth";
 
 const StudentDashboard = () => {
-  const user = JSON.parse(localStorage.getItem("user"));
+  const user = useAuth();
   const navigate = useNavigate();
-
   const [stats, setStats] = useState({ alumni: 0, sessions: 0 });
 
   useEffect(() => {
+    if (!user) return;
     fetch(`${API}/api/student/dashboard/${user.user_id}`)
       .then(res => res.json())
       .then(data => setStats({ alumni: data.alumni || 0, sessions: data.sessions || 0 }))
@@ -21,7 +22,7 @@ const StudentDashboard = () => {
       title: "Smart Match",
       desc: "Claude ranks alumni by how well they match your goals",
       path: "/student/smart-match",
-      gradient: "linear-gradient(135deg, #667eea, #764ba2)",
+      gradient: "linear-gradient(135deg, #3b82f6, #06b6d4)",
     },
     {
       icon: "💬",
@@ -61,7 +62,7 @@ const StudentDashboard = () => {
         }}>
           <h3 style={{ margin: 0 }}>AI-Powered Features</h3>
           <span style={{
-            background: "linear-gradient(135deg, #667eea, #764ba2)",
+            background: "linear-gradient(135deg, #3b82f6, #06b6d4)",
             color: "#fff",
             borderRadius: 20,
             padding: "2px 10px",

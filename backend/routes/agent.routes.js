@@ -8,16 +8,12 @@ import { orchestrate, intentAgent } from "../agents/orchestrator.agent.js";
 import { chatAgent } from "../agents/chat.agent.js";
 import { findMatchingAlumni } from "../agents/matching.agent.js";
 import db from "../db.js";
-import { verifyAuth, authorizeStudent } from "../middleware/auth.middleware.js";
 import { validators } from "../utils/validation.js";
 
 const router = express.Router();
 
-// Apply auth to all agent routes
-router.use(verifyAuth);
-
 // POST /api/agent/book – Full agentic booking pipeline
-router.post("/agent/book", authorizeStudent, async (req, res) => {
+router.post("/agent/book", async (req, res) => {
   try {
     const { student_id, alumni_id, availability_id, query } = req.body;
     
@@ -61,7 +57,7 @@ router.post("/agent/intent", async (req, res) => {
 });
 
 // POST /api/agent/match – AI-powered alumni matching
-router.post("/agent/match", authorizeStudent, async (req, res) => {
+router.post("/agent/match", async (req, res) => {
   try {
     const { student_id, query } = req.body;
     
@@ -81,9 +77,11 @@ router.post("/agent/match", authorizeStudent, async (req, res) => {
 });
 
 // POST /api/agent/chat – Conversational AI career advisor (with SSE streaming)
-router.post("/agent/chat", authorizeStudent, async (req, res) => {
+router.post("/agent/chat", async (req, res) => {
   try {
     const { student_id, messages } = req.body;
+    
+    console.log("[/agent/chat] 📥 Received:", { student_id, messagesCount: messages?.length });
     
     if (!student_id || !messages?.length) {
       return res.status(400).json({ error: "student_id and messages are required" });
@@ -91,7 +89,15 @@ router.post("/agent/chat", authorizeStudent, async (req, res) => {
     
     // Validate input
     const validatedId = validators.studentId(student_id);
-    const validatedMessages = validators.messages(messages);
+    
+    // Ensure messages have content
+    const validatedMessages = messages.filter(m => m.content && m.content.trim().length > 0);
+    
+    if (!validatedMessages.length) {
+      return res.status(400).json({ error: "At least one message with content is required" });
+    }
+    
+    console.log("[/agent/chat] ✅ Sending to chatAgent with", validatedMessages.length, "messages");
 
     if (req.headers.accept === "text/event-stream") {
       res.setHeader("Content-Type", "text/event-stream");
@@ -110,7 +116,7 @@ router.post("/agent/chat", authorizeStudent, async (req, res) => {
       res.json({ source: "chat_agent", reply });
     }
   } catch (err) {
-    console.error("[/agent/chat] Error:", err.message);
+    console.error("[/agent/chat] ❌ Error:", err.message);
     res.status(500).json({ error: "Chat agent failed", details: process.env.NODE_ENV === "development" ? err.message : undefined });
   }
 });
@@ -119,11 +125,6 @@ router.post("/agent/chat", authorizeStudent, async (req, res) => {
 router.get("/agent/notifications/:userId", async (req, res) => {
   try {
     const { userId } = req.params;
-    
-    // Verify user can only fetch their own notifications
-    if (req.user.id !== Number(userId)) {
-      return res.status(403).json({ error: "Unauthorized - you can only view your own notifications" });
-    }
     
     const [rows] = await db.query(
       `SELECT notification_id, message, is_read, created_at

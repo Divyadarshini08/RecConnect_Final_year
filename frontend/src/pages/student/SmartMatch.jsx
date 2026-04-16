@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import { API } from "../../utils/api";
 
+import { useAuth } from "../../hooks/useAuth";
+
 const SmartMatch = () => {
-  const user = JSON.parse(localStorage.getItem("user"));
+  const user = useAuth();
   const [alumni, setAlumni] = useState([]);
   const [loading, setLoading] = useState(false);
   const [query, setQuery] = useState("");
@@ -56,12 +58,13 @@ const SmartMatch = () => {
       <div style={{ marginBottom: 28 }}>
         <h2 style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <span style={{
-            background: "linear-gradient(135deg, #06b6d4, #667eea)",
+            background: "linear-gradient(135deg, #3b82f6, #06b6d4)",
             borderRadius: 10,
             padding: "4px 10px",
             fontSize: 14,
             fontWeight: 700,
             letterSpacing: 1,
+            color: "#fff"
           }}>AI</span>
           Smart Match
         </h2>

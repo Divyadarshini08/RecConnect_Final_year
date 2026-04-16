@@ -13,6 +13,11 @@ body {
   color: #ffffff;
 }
 
+#root {
+  width: 100%;
+  min-height: 100vh;
+}
+
 .page {
   padding: 40px;
   max-width: 1200px;
@@ -67,14 +72,23 @@ select {
   padding: 12px 14px;
   margin: 8px 0 16px;
   border-radius: 10px;
-  border: none;
+  border: 1px solid rgba(255, 255, 255, 0.2);
   outline: none;
   font-size: 14px;
+  background: rgba(0, 0, 0, 0.3);
+  color: #ffffff;
+}
+
+input::placeholder,
+select::placeholder {
+  color: rgba(255, 255, 255, 0.5);
 }
 
 input:focus,
 select:focus {
-  outline: 2px solid #667eea;
+  outline: 2px solid #3b82f6;
+  background: rgba(0, 0, 0, 0.4);
+  border-color: #3b82f6;
 }
 
 /* ------------------ BUTTONS ------------------ */
@@ -93,17 +107,17 @@ button:hover {
 }
 
 .primary {
-  background: linear-gradient(135deg, #667eea, #764ba2);
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
   color: #fff;
 }
 
 .secondary {
-  background: linear-gradient(135deg, #43cea2, #185a9d);
+  background: linear-gradient(135deg, #06b6d4, #0891b2);
   color: #fff;
 }
 
 .danger {
-  background: linear-gradient(135deg, #ff416c, #ff4b2b);
+  background: linear-gradient(135deg, #ef4444, #dc2626);
   color: #fff;
 }
 

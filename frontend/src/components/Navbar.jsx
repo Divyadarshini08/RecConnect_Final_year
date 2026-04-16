@@ -21,13 +21,13 @@ const Navbar = () => {
     fontSize: 14,
     fontWeight: isActive(path) ? 600 : 400,
     padding: "6px 0",
-    borderBottom: isActive(path) ? "2px solid #667eea" : "2px solid transparent",
+    borderBottom: isActive(path) ? "2px solid #3b82f6" : "2px solid transparent",
     transition: "all 0.2s",
   });
 
   return (
     <nav className="navbar">
-      <h3 className="logo">RE<span style={{ color: "#667eea" }}>Connect</span></h3>
+      <h3 className="logo">RE<span style={{ color: "#3b82f6" }}>Connect</span></h3>
 
       <div className="nav-links">
         {user.role === "student" && (
@@ -55,6 +55,9 @@ const Navbar = () => {
             <Link to="/alumni/profile" style={linkStyle("/alumni/profile")}>Profile</Link>
           </>
         )}
+
+        {/* Admin Panel Link */}
+        <Link to="/admin/login" style={linkStyle("/admin")} title="Admin Panel">⚙️ Admin</Link>
 
         <NotificationBell />
         <button className="logout-btn" onClick={logout}>Logout</button>

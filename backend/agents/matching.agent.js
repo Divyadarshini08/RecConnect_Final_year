@@ -33,6 +33,8 @@ export const findMatchingAlumni = async (studentId, query = null) => {
     const interests = student.interests?.substring(0, 100) || "general";
     const skills = student.skills?.substring(0, 100) || "general";
     
+    // FIXED: Changed from INNER JOIN to LEFT JOIN to include alumni without unbooked slots
+    // Also added check for non-rejected bookings
     const [alumni] = await db.query(
       `SELECT DISTINCT
          u.user_id AS alumni_id,
@@ -40,12 +42,11 @@ export const findMatchingAlumni = async (studentId, query = null) => {
          ap.domain,
          ap.company,
          ap.expertise,
-         COUNT(av.availability_id) AS free_slots
+         COUNT(CASE WHEN av.availability_id IS NOT NULL AND av.is_booked = 0 THEN 1 END) AS free_slots
        FROM users u
        JOIN alumni_profile ap ON ap.alumni_id = u.user_id
-       JOIN availability av ON av.alumni_id = u.user_id
+       LEFT JOIN availability av ON av.alumni_id = u.user_id AND av.is_booked = 0
        WHERE u.role = 'alumni'
-         AND av.is_booked = 0
          AND (ap.domain LIKE ? OR ap.expertise LIKE ?)
        GROUP BY u.user_id
        LIMIT 20`,

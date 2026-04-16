@@ -45,75 +45,101 @@ export function parseAvailabilityString(text) {
 }
 
 /**
- * Extract skills and keywords from resume text using Claude
- * Used when processing resume uploads or user descriptions
+ * Extract skills and keywords from resume text
+ * Uses simple keyword matching (no API calls needed)
  */
-export async function extractSkillsFromText(text, claudeClient) {
-  const systemPrompt = `You are a skills extraction agent. Extract technical skills, soft skills, and certifications from text.
-Return ONLY valid JSON:
-{
-  "technical_skills": ["skill1", "skill2"],
-  "soft_skills": ["skill1", "skill2"],
-  "certifications": ["cert1"],
-  "languages": ["language1"],
-  "years_experience": 5
-}`;
-
-  try {
-    const response = await claudeClient.messages.create({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 400,
-      system: systemPrompt,
-      messages: [{ role: "user", content: text }],
-    });
-
-    const text_content = response.content[0].text.replace(/```json|```/g, "").trim();
-    return JSON.parse(text_content);
-  } catch (err) {
-    console.error("[Skills Extraction] Failed:", err.message);
-    return {
-      technical_skills: [],
-      soft_skills: [],
-      certifications: [],
-      languages: [],
-      years_experience: 0
-    };
-  }
+export async function extractSkillsFromText(text) {
+  const lowerText = text.toLowerCase();
+  
+  // Predefined skill lists
+  const technicalSkillsList = [
+    "javascript", "python", "java", "c++", "c#", "php", "ruby", "swift", "kotlin",
+    "react", "vue", "angular", "node.js", "express", "django", "flask", "spring",
+    "sql", "mongodb", "postgresql", "mysql", "firebase", "aws", "azure", "gcp",
+    "docker", "kubernetes", "git", "jenkins", "latex", "html", "css", "api", "rest",
+    "graphql", "microservices", "agile", "scrum", "machine learning", "ai", "tensorflow",
+    "pandas", "numpy", "scikit-learn", "data science"
+  ];
+  
+  const softSkillsList = [
+    "leadership", "communication", "teamwork", "problem-solving", "critical thinking",
+    "project management", "time management", "adaptability", "creativity", "decision making",
+    "public speaking", "negotiation", "customer service", "mentoring", "collaboration"
+  ];
+  
+  const certificationsList = [
+    "aws", "azure", "gcp", "cissp", "comptia", "ccna", "scrum", "pmp", "acm",
+    "java certified", "microsoft", "linux", "kubernetes"
+  ];
+  
+  const languagesList = [
+    "english", "spanish", "french", "german", "mandarin", "hindi", "arabic",
+    "portuguese", "russian", "japanese", "korean", "italian", "dutch"
+  ];
+  
+  // Extract skills by keyword matching
+  const technical_skills = technicalSkillsList.filter(skill => lowerText.includes(skill));
+  const soft_skills = softSkillsList.filter(skill => lowerText.includes(skill));
+  const certifications = certificationsList.filter(cert => lowerText.includes(cert));
+  const languages = languagesList.filter(lang => lowerText.includes(lang));
+  
+  // Extract years of experience from text
+  const expMatch = text.match(/(\d+)\s*[-+]?\s*years?\s*(?:of\s*)?(?:experience|exp)/i);
+  const years_experience = expMatch ? parseInt(expMatch[1]) : 0;
+  
+  return {
+    technical_skills: [...new Set(technical_skills)],
+    soft_skills: [...new Set(soft_skills)],
+    certifications: [...new Set(certifications)],
+    languages: [...new Set(languages)],
+    years_experience
+  };
 }
 
 /**
  * Analyze sentiment and urgency from user message
  * Returns sentiment score (-1 to 1) and urgency level
+ * Uses simple keyword-based analysis (no API calls)
  */
-export async function analyzeSentimentAndUrgency(text, claudeClient) {
-  const systemPrompt = `Analyze the sentiment and urgency of this message.
-Return ONLY valid JSON:
-{
-  "sentiment": -1 to 1 (negative to positive),
-  "urgency": "low" | "medium" | "high" | "critical",
-  "emotion": "description of detected emotion",
-  "confidence": 0-1
-}`;
-
-  try {
-    const response = await claudeClient.messages.create({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 300,
-      system: systemPrompt,
-      messages: [{ role: "user", content: text }],
-    });
-
-    const content = response.content[0].text.replace(/```json|```/g, "").trim();
-    return JSON.parse(content);
-  } catch (err) {
-    console.error("[Sentiment Analysis] Failed:", err.message);
-    return {
-      sentiment: 0,
-      urgency: "medium",
-      emotion: "unknown",
-      confidence: 0.5
-    };
+export async function analyzeSentimentAndUrgency(text) {
+  const lowerText = text.toLowerCase();
+  
+  // Sentiment keywords
+  const positiveSentiments = ["great", "love", "excellent", "perfect", "happy", "glad", "thanks", "appreciated"];
+  const negativeSentiments = ["hate", "worst", "terrible", "awful", "bad", "sad", "angry", "frustrated", "stuck"];
+  
+  // Urgency keywords
+  const urgentKeywords = ["urgent", "asap", "emergency", "critical", "immediate", "help", "stuck", "blocked", "failure"];
+  const criticalKeywords = ["emergency", "critical", "life-threatening", "urgent help"];
+  
+  // Calculate sentiment
+  const positiveCount = positiveSentiments.filter(w => lowerText.includes(w)).length;
+  const negativeCount = negativeSentiments.filter(w => lowerText.includes(w)).length;
+  const sentiment = (positiveCount - negativeCount) / Math.max(positiveCount + negativeCount, 1);
+  
+  // Determine urgency
+  let urgency = "low";
+  if (criticalKeywords.some(k => lowerText.includes(k))) {
+    urgency = "critical";
+  } else if (urgentKeywords.some(k => lowerText.includes(k))) {
+    urgency = "high";
+  } else if (text.includes("?")) {
+    urgency = "medium";
   }
+  
+  // Determine emotion
+  let emotion = "neutral";
+  if (sentiment > 0.5) emotion = "positive";
+  else if (sentiment < -0.5) emotion = "negative";
+  else if (sentiment > 0.2) emotion = "somewhat positive";
+  else if (sentiment < -0.2) emotion = "somewhat negative";
+  
+  return {
+    sentiment: Math.max(-1, Math.min(1, sentiment)),
+    urgency,
+    emotion,
+    confidence: Math.min(1, (positiveCount + negativeCount) * 0.3 + 0.3)
+  };
 }
 
 /**

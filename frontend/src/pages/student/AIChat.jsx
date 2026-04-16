@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { API } from "../../utils/api";
+import { useAuth } from "../../hooks/useAuth";
 
 const SUGGESTIONS = [
   "I want to switch careers into AI/ML — who should I talk to?",
@@ -10,7 +11,7 @@ const SUGGESTIONS = [
 ];
 
 const AIChat = () => {
-  const user = JSON.parse(localStorage.getItem("user"));
+  const user = useAuth();
   const [messages, setMessages] = useState([
     {
       role: "assistant",
@@ -132,7 +133,7 @@ const AIChat = () => {
       <div style={{ marginBottom: 20 }}>
         <h2 style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <span style={{
-            background: "linear-gradient(135deg, #667eea, #764ba2)",
+            background: "linear-gradient(135deg, #3b82f6, #06b6d4)",
             borderRadius: "50%",
             width: 36,
             height: 36,
